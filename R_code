@@ -1,0 +1,38 @@
+#multiple samples
+library(Seurat)
+library(cowplot)
+
+#read data (repeat for all files)
+data1 = Read10X(data.dir = '~/directory_to_file/filtered_feature_bc_matrix/')
+
+#Create Seurat Object (repeat for all files)
+AC1 = CreateSeuratObject(counts = data1, project = "IL33", min.cells = 5, min.features = 200)
+AC1$stim = "AC1"
+AC1[["percent.mt"]] = PercentageFeatureSet(AC1, pattern = "^mt-")
+VlnPlot(AC1, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3)
+AC1 = subset(AC1, subset = nFeature_RNA > 500 & nCount_RNA < 15000 & percent.mt < 5)
+AC1 = NormalizeData(AC1, verbose = T)
+AC1 = FindVariableFeatures(AC1, selection.method = "vst", nfeatures = 2000)
+
+
+cases = list(#all seurat objects)
+
+features = SelectIntegrationFeatures(object.list = cases)
+cases = lapply(X = cases, FUN = function(x) {
+  x <- ScaleData(x, features = features, verbose = FALSE)
+  x <- RunPCA(x, features = features, verbose = FALSE)
+})
+
+#Integration
+IL33.anch = FindIntegrationAnchors(object.list = cases, anchor.features = features, reduction = "rpca")
+IL33.com = IntegrateData(anchorset = IL33.anch)
+
+#Integrated analysis
+DefaultAssay(IL33.com) = "integrated"
+IL33.com = ScaleData(IL33.com, verbose = T)
+IL33.com = RunPCA(IL33.com, npcs = 50, verbose = T)
+IL33.com = RunUMAP(IL33.com, reduction = "pca", dims = 1:30)
+IL33.com = FindNeighbors(IL33.com, reduction = "pca", dims = 1:30)
+IL33.com = FindClusters(IL33.com, resolution = 0.3)
+
+saveRDS(IL33.com, file = "~/directory_to_file")
